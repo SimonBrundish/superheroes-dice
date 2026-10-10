@@ -153,6 +153,17 @@ body:fullscreen, :fullscreen body { overflow: auto; }
 }
 /* Compact mode for small embeds: add #compact or ?compact=1 */
 .compact header { display: none; }
+.video-pop { width: min(900px, 94vw); padding: 0; border: 4px solid #111; border-radius: 16px; background: #000; color: #fff; box-shadow: 8px 8px 0 #000; }
+.video-pop::backdrop { background: rgba(0,0,0,.75); }
+.video-pop .pop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; background: var(--hero); }
+.video-pop .pop-title { font-family: var(--display); font-size: 24px; letter-spacing: .03em; line-height: 1.05; }
+.video-pop .pop-close { font: inherit; font-weight: 800; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; padding: 6px 12px; border-radius: 8px; border: 2px solid #111; background: #fff; color: #111; cursor: pointer; }
+.video-pop .pop-frame { aspect-ratio: 16 / 9; background: #000; display: grid; place-items: center; }
+.video-pop iframe { width: 100%; height: 100%; border: 0; display: block; }
+.video-pop .pop-missing { padding: 24px; text-align: center; font-weight: 600; }
+.video-pop .pop-foot { padding: 8px 12px; font-size: 13px; text-align: right; }
+.video-pop .pop-foot a { color: #DADADA; }
+button.video { font: inherit; cursor: pointer; border: 0; width: 100%; }
 </style>
 </head>
 <body>
@@ -189,7 +200,7 @@ body:fullscreen, :fullscreen body { overflow: auto; }
           <div class="tag" id="cardTag">Today's exercise</div>
           <div class="lvl" id="cardTitle">Half Plank</div>
           <div class="meta"><span id="cardHero">Superman · Level 1 of 24</span><span id="cardYear">Year 1</span></div>
-          <a class="video" id="cardVideo" href="https://www.strengthlabsuperheroes.com/exercises" target="_blank" rel="noopener">Watch the video on Superheroes ↗</a>
+          <button class="video" id="cardVideo" type="button">▶ Watch the video</button>
         </div>
       </article>
       <div class="again">
@@ -208,6 +219,12 @@ body:fullscreen, :fullscreen body { overflow: auto; }
 
   <div class="history" id="history" aria-label="Previous rolls"></div>
 </div>
+
+<dialog class="video-pop" id="videoPop" aria-labelledby="popTitle">
+  <div class="pop-head"><span class="pop-title" id="popTitle">Exercise</span><button class="pop-close" id="popClose" type="button">Close ✕</button></div>
+  <div class="pop-frame" id="popFrame"></div>
+  <div class="pop-foot"><a id="popSite" href="https://www.strengthlabsuperheroes.com/exercises" target="_blank" rel="noopener">Open on Superheroes ↗</a></div>
+</dialog>
 
 <script>
 const HEROES = [
@@ -350,6 +367,15 @@ const EXERCISES = {
   "Smash With Double Press Ups, Double M-W-M To Lunge"
  ]
 };
+
+// Vimeo video for each level, per hero (null = new video needed)
+const VIDEOS = {
+ "ironman": ["175238442", "175238444", "175238445", "175238446", "176029068", "175763979", "175727574", "175727580", "175819648", "175821445", "175823374", "175727572", "223947100", "223782659", "223783443", "223778682", "223781928", "223780631", "223779478", "223784027", "223781652", "223784706", "223785417", "223947404"],
+ "spiderman": ["175268471", "175268472", "175727571", "175268607", "176174840", "223800440", "175772336", "223801264", "175772335", "175772333", "223801806", "175773818", "223806034", "175268474", "223806034", "175772334", "175774988", "176174838", "223799706", "223804816", "223798576", "223802479", "223803549", "223807253"],
+ "thor": ["175305126", "175305122", "175305123", "175305124", "176036367", "176075853", "176081060", "176085256", "176085259", "176036368", "176036369", "176036371", "223785788", "223789879", "223790361", "223791222", "223792339", "223788779", "223794155", "223794531", "223795761", "223796800", "223793473", "223789410"],
+ "superman": ["175311189", "175311186", "175311187", "175311188", "176174846", "223948247", "175727576", "176174839", "223797607", "176174836", "176174841", "176174837", "223948828", "176174847", null, "223949289", "223950268", "223951188", "223952000", "223950497", "223952682", "223952342", "223953455", "223948156"],
+ "hulk": ["184862501", "175317955", "175317957", "175318926", "176220722", "176220716", "176224371", "176220719", "176220723", "176224370", "176220713", "176224375", "223808323", "223809036", "223809893", "223810959", "223814207", "223811940", "223813114", "223815359", "223816080", "223817173", "223818274", "223819419"]
+};
 const YEARS = 6, PER_YEAR = 4, ALL = 0;   // year 0 means every level, 1–24
 
 const $ = id => document.getElementById(id);
@@ -469,7 +495,6 @@ function reveal(r) {
   $("cardTitle").textContent = EXERCISES[r.hero.id][r.level - 1];
   $("cardHero").textContent = `${r.hero.name} · Level ${r.level} of 24`;
   $("cardYear").textContent = yearName(r.year);
-  $("cardVideo").href = `https://www.strengthlabsuperheroes.com/exercises?superhero=${r.hero.site}&level=${r.level}`;
   $("diceBox").hidden = true; $("resultBox").hidden = false;
   const card = $("card");
   card.classList.remove("show"); void card.offsetWidth; card.classList.add("show");
@@ -486,9 +511,26 @@ function reveal(r) {
 $("spinBtn").onclick = roll;
 $("againBtn").onclick = roll;
 
+// Exercise video in a pop-up
+function openVideo() {
+  if (!last) return;
+  const { hero, level } = last, id = VIDEOS[hero.id][level - 1];
+  $("popTitle").textContent = `${hero.name} ${level}: ${EXERCISES[hero.id][level - 1]}`;
+  $("popSite").href = `https://www.strengthlabsuperheroes.com/exercises?superhero=${hero.site}&level=${level}`;
+  $("popFrame").innerHTML = id
+    ? `<iframe src="https://player.vimeo.com/video/${id}?autoplay=1&title=0&byline=0&portrait=0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title="Exercise video"></iframe>`
+    : `<p class="pop-missing">A new video for this level is on its way.</p>`;
+  $("videoPop").showModal();
+}
+function closeVideo() { $("videoPop").close(); }
+$("cardVideo").onclick = openVideo;
+$("popClose").onclick = closeVideo;
+$("videoPop").addEventListener("close", () => { $("popFrame").innerHTML = ""; $("cardVideo").focus({ preventScroll: true }); });
+$("videoPop").addEventListener("click", e => { if (e.target === e.currentTarget) closeVideo(); });
+
 // Space bar rolls (when focus is not already on a button)
 document.addEventListener("keydown", e => {
-  if (e.code === "Space" && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); roll(); }
+  if (e.code === "Space" && !$("videoPop").open && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); roll(); }
 });
 
 // Practice timer with a beep at the end
